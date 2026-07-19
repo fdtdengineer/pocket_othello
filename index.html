@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#07140f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Pocket Othello" />
+  <meta name="description" content="A responsive Othello game with CPU and online room-code matches." />
+  <title>Pocket Othello</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js" defer></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">RESPONSIVE BOARD GAME</p>
+        <h1>Pocket Othello</h1>
+      </div>
+      <button id="menuButton" class="icon-button" type="button" aria-label="Open game menu">☰</button>
+    </header>
+
+    <section class="game-layout">
+      <aside class="side-panel score-panel" aria-label="Score">
+        <article id="blackCard" class="player-card black-card is-active">
+          <div class="player-label"><span class="mini-disc black-disc"></span><span id="blackLabel">You · Black</span></div>
+          <strong id="blackScore">2</strong>
+        </article>
+        <article id="whiteCard" class="player-card white-card">
+          <div class="player-label"><span class="mini-disc white-disc"></span><span id="whiteLabel">CPU · White</span></div>
+          <strong id="whiteScore">2</strong>
+        </article>
+
+        <article class="info-card">
+          <span>Mode</span>
+          <strong id="modeText">CPU · Normal</strong>
+        </article>
+        <article class="info-card desktop-only">
+          <span>How to play</span>
+          <p>Place a disc to trap your opponent's discs in a straight line.</p>
+        </article>
+      </aside>
+
+      <section class="center-column">
+        <div class="status-bar" aria-live="polite">
+          <span id="connectionDot" class="status-dot"></span>
+          <strong id="statusText">Your turn</strong>
+        </div>
+
+        <div class="board-frame">
+          <div id="board" class="board" role="grid" aria-label="Othello board"></div>
+          <div id="thinkingBadge" class="thinking-badge" hidden>CPU is thinking…</div>
+        </div>
+
+        <div class="action-row">
+          <button id="undoButton" class="secondary-button" type="button">Undo</button>
+          <button id="newGameButton" class="primary-button" type="button">New Game</button>
+        </div>
+      </section>
+
+      <aside class="side-panel controls-panel">
+        <article class="control-card">
+          <span>CPU Difficulty</span>
+          <div class="segmented" role="group" aria-label="CPU difficulty">
+            <button type="button" data-difficulty="easy">Easy</button>
+            <button type="button" data-difficulty="normal" class="is-selected">Normal</button>
+            <button type="button" data-difficulty="hard">Hard</button>
+          </div>
+        </article>
+
+        <article class="control-card online-summary">
+          <span>Online Match</span>
+          <p>Play directly with a friend using a six-character room code.</p>
+          <button id="onlineButton" class="outline-button" type="button">Play Online</button>
+        </article>
+
+        <article class="control-card desktop-only">
+          <span>Tips</span>
+          <p>Corners are powerful. Avoid giving them away early.</p>
+        </article>
+      </aside>
+    </section>
+
+    <footer><span>GitHub Pages ready</span><span>iPhone / Android / PC</span></footer>
+  </main>
+
+  <div id="modalBackdrop" class="modal-backdrop is-visible">
+    <section id="menuModal" class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button id="closeModalButton" class="modal-close" type="button" aria-label="Close">×</button>
+      <p class="modal-kicker">CHOOSE A MODE</p>
+      <h2 id="modalTitle">Pocket Othello</h2>
+      <p class="modal-copy">Play against the CPU, share the device, or connect directly to another player.</p>
+
+      <div id="modeChooser" class="mode-grid">
+        <button id="cpuModeButton" class="mode-button" type="button">
+          <span class="mode-icon">◐</span><strong>vs CPU</strong><small>Easy, Normal, or Hard</small>
+        </button>
+        <button id="localModeButton" class="mode-button" type="button">
+          <span class="mode-icon">●●</span><strong>Two Players</strong><small>Share this device</small>
+        </button>
+        <button id="onlineModeButton" class="mode-button accent-mode" type="button">
+          <span class="mode-icon">◎</span><strong>Online</strong><small>Create or join a room</small>
+        </button>
+      </div>
+
+      <div id="onlinePanel" class="online-panel" hidden>
+        <button id="backToModesButton" class="text-button" type="button">← Back</button>
+        <div class="online-actions">
+          <button id="createRoomButton" class="primary-button" type="button">Create Room</button>
+          <div class="or-divider"><span>or</span></div>
+          <label for="roomCodeInput">Room code</label>
+          <div class="join-row">
+            <input id="roomCodeInput" type="text" inputmode="text" maxlength="6" autocomplete="off" placeholder="ABC234" aria-label="Room code" />
+            <button id="joinRoomButton" class="outline-button" type="button">Join</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="waitingPanel" class="waiting-panel" hidden>
+        <div class="pulse-ring"><span></span></div>
+        <p id="waitingTitle" class="waiting-title">Waiting for an opponent…</p>
+        <div id="roomCodeBox" class="room-code-box">
+          <span>ROOM CODE</span>
+          <strong id="roomCodeText">------</strong>
+        </div>
+        <button id="shareRoomButton" class="outline-button" type="button">Share Invite</button>
+        <p id="onlineStatusText" class="small-note">Keep this page open.</p>
+        <button id="cancelOnlineButton" class="text-button danger-text" type="button">Cancel</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
