@@ -1,0 +1,19 @@
+{
+  "name": "Pocket Othello",
+  "short_name": "Othello",
+  "description": "A responsive Othello game with CPU and online room-code matches.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#06110d",
+  "theme_color": "#07140f",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
