@@ -2,6 +2,10 @@
 
 A responsive Othello/Reversi web game for iPhone, Android, and desktop browsers. It is built with plain HTML, CSS, and JavaScript and is ready for GitHub Pages.
 
+## Play Online
+
+https://fdtdengineer.github.io/pocket_othello/
+
 ## Features
 
 - Standard 8×8 Othello rules, legal-move hints, pass handling, and score tracking
