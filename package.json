@@ -1,0 +1,10 @@
+{
+  "name": "pocket-othello",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/engine.test.mjs",
+    "check": "node --check app.js && node --check engine.js && node --check ai.js && node --check online.js"
+  }
+}
