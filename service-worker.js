@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pocket-othello-v1';
+const CACHE_NAME = 'pocket-othello-v2';
 const LOCAL_ASSETS = [
   './',
   './index.html',
