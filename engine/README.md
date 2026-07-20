@@ -19,8 +19,14 @@ engine/
     ├── othello/
     │   ├── __init__.py
     │   └── rules.py    # Rules-compatible Python implementation
+    ├── dqn/
+    │   ├── encoding.py
+    │   ├── model.py
+    │   ├── replay_buffer.py
+    │   └── agent.py
     └── tests/
-        └── test_rules.py
+        ├── test_rules.py
+        └── test_dqn.py
 ```
 
 ## Shared representation contract
@@ -36,7 +42,7 @@ All implementations use the following representation unless a boundary adapter e
 - DQN action mask: 64 booleans, with `true` only for legal squares
 - Recommended terminal reward: `+1` win, `0` draw, `-1` loss from the acting agent's perspective
 
-Keeping the action space fixed at 64 allows a future DQN to output one Q-value per square and mask illegal actions before selecting `argmax`.
+Keeping the action space fixed at 64 allows the DQN to output one Q-value per square and mask illegal actions before selecting `argmax`.
 
 ## JavaScript API
 
@@ -74,7 +80,24 @@ next_board = apply_move(board, move, BLACK)
 mask = legal_action_mask(next_board, -BLACK)
 ```
 
-Neural-network code should depend on this rules API rather than implementing a second set of game transitions.
+Neural-network code depends on this rules API rather than implementing a second set of game transitions.
+
+## Compact Dueling Double DQN
+
+The Python DQN package currently provides:
+
+- player-relative `4 × 8 × 8` observations
+- a 56,978-parameter residual dueling Q-network
+- one Q-value for each of the 64 board squares
+- epsilon-greedy legal-action selection
+- a CPU-backed replay buffer
+- Double-DQN target computation
+- hard and soft target-network updates
+- Smooth L1 optimization with gradient clipping
+
+The replay transition stores a signed bootstrap factor. It is `-1` when the opponent acts next and `+1` when an opponent pass lets the same player move again. This preserves the zero-sum meaning of player-relative Q-values.
+
+Training loops, teacher-data generation, self-play, evaluation, and ONNX export remain separate stages and will build on these primitives.
 
 ## Cross-language validation
 
@@ -87,11 +110,17 @@ Neural-network code should depend on this rules API rather than implementing a s
 - pass and next-player decisions
 - terminal and winner decisions
 
-Run all checks from the repository root:
+Run lightweight checks from the repository root:
 
 ```bash
 npm test
 npm run check
+```
+
+After installing the optional PyTorch dependency, run:
+
+```bash
+npm run test:dqn
 ```
 
 ## CodinGame validation
@@ -107,7 +136,3 @@ engine/codingame/othello.js
 ```
 
 The file is standalone: it contains no imports, exports, browser APIs, or build step. It parses the CodinGame board and legal-action input, searches for at most 100 ms, validates its selected coordinate against the referee-provided legal actions, and prints one move.
-
-## DQN boundary
-
-Future training, replay buffers, checkpoints, neural networks, and ONNX export code belong under `engine/python/`. They should depend on the stable Python rules API and must not depend on the browser UI or CodinGame input/output adapters.
