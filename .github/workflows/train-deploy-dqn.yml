@@ -1,0 +1,226 @@
+name: Train and deploy DQN model
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/train-deploy-dqn.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install training dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install numpy onnx onnxruntime
+          python -m pip install -e engine/python --no-deps
+
+      - name: Generate Hard CPU teacher data
+        run: |
+          mkdir -p engine/python/data engine/python/checkpoints training-results
+          npm run generate:teacher -- \
+            --games 250 \
+            --max-examples 12000 \
+            --time-ms 20 \
+            --max-depth 5 \
+            --exploration 0.25 \
+            --seed 20260720 \
+            --output engine/python/data/teacher.jsonl
+
+      - name: Train imitation model
+        run: |
+          npm run train:imitation -- \
+            --data engine/python/data/teacher.jsonl \
+            --output engine/python/checkpoints/imitation.pt \
+            --epochs 12 \
+            --batch-size 128 \
+            --augmentation random \
+            --seed 20260720 \
+            --device cpu | tee training-results/imitation.log
+
+      - name: Train mixed-opponent Double DQN
+        run: |
+          npm run train:reinforcement -- \
+            --init-checkpoint engine/python/checkpoints/imitation.pt \
+            --output engine/python/checkpoints/reinforcement.pt \
+            --episodes 1500 \
+            --batch-size 128 \
+            --replay-capacity 100000 \
+            --warmup-transitions 1500 \
+            --updates-per-episode 6 \
+            --epsilon-start 0.25 \
+            --epsilon-end 0.04 \
+            --epsilon-decay-episodes 1200 \
+            --self-play-weight 0.45 \
+            --heuristic-weight 0.40 \
+            --random-weight 0.15 \
+            --checkpoint-every 500 \
+            --seed 20260720 \
+            --device cpu | tee training-results/reinforcement.log
+
+      - name: Evaluate and select checkpoint
+        run: |
+          python - <<'PY'
+          import json
+          import random
+          from pathlib import Path
+          import torch
+          from dqn.model import DuelingQNetwork
+          from dqn.self_play import play_episode
+
+          candidates = {
+              'imitation': Path('engine/python/checkpoints/imitation.pt'),
+              'reinforcement': Path('engine/python/checkpoints/reinforcement.pt'),
+          }
+          results = {}
+          for name, path in candidates.items():
+              checkpoint = torch.load(path, map_location='cpu', weights_only=False)
+              config = dict(checkpoint['model_config'])
+              model = DuelingQNetwork(**config)
+              model.load_state_dict(checkpoint['model_state_dict'])
+              model.eval()
+              wins = draws = losses = 0
+              disc_diffs = []
+              colors = {'black': 0, 'white': 0}
+              for game in range(120):
+                  result = play_episode(
+                      model,
+                      mode='heuristic',
+                      epsilon=0.0,
+                      rng=random.Random(20260720 + game),
+                  )
+                  colors['black' if result.network_color == 1 else 'white'] += 1
+                  network_discs = result.black_discs if result.network_color == 1 else result.white_discs
+                  opponent_discs = result.white_discs if result.network_color == 1 else result.black_discs
+                  disc_diffs.append(network_discs - opponent_discs)
+                  if result.winner == result.network_color:
+                      wins += 1
+                  elif result.winner == 0:
+                      draws += 1
+                  else:
+                      losses += 1
+              results[name] = {
+                  'checkpoint': str(path),
+                  'games': 120,
+                  'wins': wins,
+                  'draws': draws,
+                  'losses': losses,
+                  'win_rate': wins / 120,
+                  'non_loss_rate': (wins + draws) / 120,
+                  'mean_disc_difference': sum(disc_diffs) / len(disc_diffs),
+                  'network_colors': colors,
+                  'best_validation_accuracy': checkpoint.get('best_validation_accuracy'),
+              }
+
+          selected = max(
+              results,
+              key=lambda name: (
+                  results[name]['win_rate'],
+                  results[name]['non_loss_rate'],
+                  results[name]['mean_disc_difference'],
+              ),
+          )
+          report = {
+              'format_version': 1,
+              'opponent': 'python_fixed_heuristic',
+              'selection_rule': 'win_rate, then non_loss_rate, then mean_disc_difference',
+              'selected': selected,
+              'selected_checkpoint': results[selected]['checkpoint'],
+              'candidates': results,
+          }
+          Path('training-results').mkdir(exist_ok=True)
+          Path('training-results/evaluation.json').write_text(
+              json.dumps(report, indent=2) + '\n', encoding='utf-8'
+          )
+          Path('training-results/selected_checkpoint.txt').write_text(
+              results[selected]['checkpoint'] + '\n', encoding='utf-8'
+          )
+          print(json.dumps(report, indent=2))
+          PY
+
+      - name: Export selected ONNX model
+        run: |
+          CHECKPOINT="$(cat training-results/selected_checkpoint.txt)"
+          npm run export:onnx -- \
+            --checkpoint "$CHECKPOINT" \
+            --output engine/models/othello_dqn.onnx | tee training-results/export.log
+          cp training-results/evaluation.json engine/models/othello_dqn_evaluation.json
+
+      - name: Validate deployed ONNX model
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import numpy as np
+          import onnx
+          import onnxruntime as ort
+          from othello import BLACK, create_initial_board
+          from dqn.encoding import encode_observation
+
+          model_path = Path('engine/models/othello_dqn.onnx')
+          metadata_path = Path('engine/models/othello_dqn.json')
+          evaluation_path = Path('engine/models/othello_dqn_evaluation.json')
+          onnx.checker.check_model(onnx.load(model_path))
+          session = ort.InferenceSession(str(model_path), providers=['CPUExecutionProvider'])
+          observation = encode_observation(create_initial_board(), BLACK).numpy()[None].astype(np.float32)
+          output = session.run(None, {'observation': observation})[0]
+          assert output.shape == (1, 64)
+          metadata = json.loads(metadata_path.read_text())
+          evaluation = json.loads(evaluation_path.read_text())
+          assert metadata['byte_size'] < 1_000_000
+          assert evaluation['selected'] in {'imitation', 'reinforcement'}
+          print({'shape': output.shape, 'bytes': metadata['byte_size'], 'selected': evaluation['selected']})
+          PY
+
+      - name: Upload training artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocket-othello-dqn-training
+          path: |
+            training-results/
+            engine/python/checkpoints/imitation.pt
+            engine/python/checkpoints/reinforcement.pt
+            engine/python/data/teacher.jsonl
+            engine/python/data/teacher.meta.json
+            engine/models/othello_dqn.onnx
+            engine/models/othello_dqn.json
+            engine/models/othello_dqn_evaluation.json
+          retention-days: 30
+
+      - name: Commit selected browser model
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f engine/models/othello_dqn.onnx
+          git add engine/models/othello_dqn.json engine/models/othello_dqn_evaluation.json
+          if git diff --cached --quiet; then
+            echo 'No model changes to commit.'
+          else
+            git commit -m 'Deploy trained DQN model [skip ci]'
+            git push
+          fi
