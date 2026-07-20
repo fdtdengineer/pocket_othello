@@ -64,9 +64,9 @@ jobs:
       - name: Prepare static ONNX Runtime assets
         run: |
           npm run prepare:web -- --output /tmp/onnxruntime-web
-          test -f /tmp/onnxruntime-web/ort.wasm.min.mjs
+          test -f /tmp/onnxruntime-web/ort.wasm.bundle.min.mjs
+          test -f /tmp/onnxruntime-web/ort-wasm-simd-threaded.wasm
           test -f /tmp/onnxruntime-web/manifest.json
-          find /tmp/onnxruntime-web -name '*.wasm' -print -quit | grep .
 
       - name: Check JavaScript syntax
         run: npm run check
