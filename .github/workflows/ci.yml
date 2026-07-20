@@ -44,5 +44,8 @@ jobs:
       - name: Run imitation pretraining smoke test
         run: npm run test:imitation
 
+      - name: Run mixed-opponent reinforcement smoke test
+        run: npm run test:reinforcement
+
       - name: Check JavaScript syntax
         run: npm run check
