@@ -19,7 +19,7 @@
     "train:reinforcement": "python -m dqn.reinforcement",
     "export:onnx": "python -m dqn.export_onnx",
     "prepare:web": "node scripts/prepare-web.mjs",
-    "check": "node --check app.js && node --check engine.js && node --check ai.js && node --check online.js && node --check engine/javascript/rules.js && node --check engine/javascript/evaluation.js && node --check engine/javascript/search.js && node --check engine/javascript/index.js && node --check engine/javascript/dqn-core.js && node --check engine/javascript/dqn-client.js && node --check engine/javascript/dqn-worker.js && node --check engine/javascript/generate_teacher_data.mjs && node --check engine/codingame/othello.js && node --check scripts/prepare-web.mjs && node --check tests/export_js_rule_cases.mjs && node --check tests/dqn_web.test.mjs && node --check tests/dqn_ort_web.test.mjs"
+    "check": "node --check app.js && node --check service-worker.js && node --check engine.js && node --check ai.js && node --check online.js && node --check engine/javascript/rules.js && node --check engine/javascript/evaluation.js && node --check engine/javascript/search.js && node --check engine/javascript/index.js && node --check engine/javascript/dqn-core.js && node --check engine/javascript/dqn-client.js && node --check engine/javascript/dqn-worker.js && node --check engine/javascript/generate_teacher_data.mjs && node --check engine/codingame/othello.js && node --check scripts/prepare-web.mjs && node --check tests/export_js_rule_cases.mjs && node --check tests/dqn_web.test.mjs && node --check tests/dqn_ort_web.test.mjs"
   },
   "dependencies": {
     "onnxruntime-web": "1.27.0"
