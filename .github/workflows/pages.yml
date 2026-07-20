@@ -23,12 +23,34 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install browser dependencies
+        run: npm install --omit=dev --no-audit --no-fund
+
+      - name: Build static site
+        run: |
+          rm -rf _site
+          mkdir _site
+          rsync -a \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='_site' \
+            ./ _site/
+          npm run prepare:web -- --output _site/vendor/onnxruntime-web
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
+
       - name: Upload static site
         uses: actions/upload-pages-artifact@v4
         with:
-          path: .
+          path: _site
+
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
