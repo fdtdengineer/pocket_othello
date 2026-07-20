@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pocket-othello-v3';
+const CACHE_NAME = 'pocket-othello-v4';
 const LOCAL_ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,10 @@ const LOCAL_ASSETS = [
   './app.js',
   './engine.js',
   './ai.js',
+  './engine/javascript/rules.js',
+  './engine/javascript/evaluation.js',
+  './engine/javascript/search.js',
+  './engine/javascript/index.js',
   './online.js',
   './manifest.webmanifest',
   './icon.svg',
