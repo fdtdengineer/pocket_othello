@@ -1,44 +1,29 @@
 # Python/PyTorch DQN Engine
 
-This directory contains the Python rules layer, compact PyTorch DQN components, Hard-CPU teacher data, imitation pretraining, and mixed-opponent reinforcement learning for a future browser-deployable Othello agent.
-
-## Layout
-
-```text
-engine/python/
-├── othello/
-│   ├── rules.py
-│   └── heuristic.py      # Fixed deterministic opponent
-├── dqn/
-│   ├── encoding.py
-│   ├── model.py
-│   ├── replay_buffer.py
-│   ├── agent.py
-│   ├── teacher_data.py
-│   ├── symmetry.py
-│   ├── imitation.py
-│   ├── self_play.py      # Complete episode collection
-│   └── reinforcement.py  # Mixed-opponent Double-DQN CLI
-└── tests/
-```
+This directory contains the Python rules layer, compact PyTorch DQN training, and browser-ready ONNX export.
 
 ## Installation
+
+```bash
+python -m pip install -e "engine/python[all]"
+```
+
+For training only:
 
 ```bash
 python -m pip install -e "engine/python[dqn]"
 ```
 
-## Observation and model
+## Model contract
 
-`encode_observation(board, player)` returns a player-relative `4 × 8 × 8` tensor containing own discs, opponent discs, legal actions, and game progress. The default `DuelingQNetwork` has 56,978 trainable parameters, about 228 KB of FP32 weights before ONNX packaging or quantization.
+`encode_observation(board, player)` returns a player-relative `4 × 8 × 8` float tensor:
 
-Each replay transition stores a signed bootstrap factor:
+1. acting player's discs
+2. opponent discs
+3. legal-action mask
+4. game-progress plane
 
-```text
-target = reward + gamma * bootstrap_sign * next_value
-```
-
-The sign is `-1` when the opponent acts next and `+1` when an opponent pass lets the same player move again.
+The default `DuelingQNetwork` has 56,978 trainable parameters and 64 row-major action outputs.
 
 ## 1. Generate Hard-CPU teacher data
 
@@ -52,8 +37,6 @@ npm run generate:teacher -- \
   --exploration 0.20
 ```
 
-Every record is validated against the Python rules engine before training.
-
 ## 2. Imitation pretraining
 
 ```bash
@@ -61,12 +44,9 @@ npm run train:imitation -- \
   --data engine/python/data/teacher.jsonl \
   --output engine/python/checkpoints/imitation.pt \
   --epochs 20 \
-  --batch-size 128 \
   --augmentation random \
   --device auto
 ```
-
-The trainer splits complete games between training and validation, masks illegal logits, supports all eight board symmetries, and saves the best validation model.
 
 ## 3. Mixed-opponent reinforcement training
 
@@ -81,24 +61,32 @@ npm run train:reinforcement -- \
   --device auto
 ```
 
-The opponent pool contains:
+The replay pool combines self-play, deterministic heuristic, and random-opponent games. All moves are retained as off-policy experience, with signed pass-aware Double-DQN targets.
 
-- the current network on both colors for self-play
-- a deterministic one-ply positional/mobility heuristic
-- a random legal policy
+## 4. Export ONNX for the browser
 
-All moves are retained as off-policy experience, including fixed-opponent actions. This ensures that terminal rewards remain observable when the fixed opponent makes the final move.
+```bash
+npm run export:onnx -- \
+  --checkpoint engine/python/checkpoints/reinforcement.pt \
+  --output engine/models/othello_dqn.onnx
+```
 
-The reinforcement trainer provides:
+The exporter accepts either an imitation checkpoint (`model_state_dict`) or a reinforcement checkpoint (`online_state_dict`). It writes:
 
-- replay memory and configurable warmup
-- signed Double-DQN targets
-- linear epsilon decay
-- soft target-network updates
-- configurable opponent mixture
-- periodic checkpoints with online/target weights, optimizer state, training settings, replay size, losses, and game results
+```text
+engine/models/othello_dqn.onnx
+engine/models/othello_dqn.json
+```
 
-The replay buffer itself is not serialized because it can become much larger than the mobile inference model.
+The metadata JSON records:
+
+- model dimensions and parameter count
+- input/output names, shapes, and data types
+- channel order and 64-action row-major contract
+- ONNX opset, byte size, and SHA-256 hash
+- ONNX checker result and PyTorch/ONNX Runtime maximum absolute error
+
+The ONNX graph has a dynamic batch dimension but fixed `4 × 8 × 8` spatial input. It excludes the optimizer, replay buffer, and training history.
 
 ## Validation
 
@@ -108,6 +96,7 @@ npm run test:dqn
 npm run test:teacher
 npm run test:imitation
 npm run test:reinforcement
+npm run test:onnx
 ```
 
-The reinforcement smoke test runs complete games against self-play, heuristic, and random opponents, verifies legal actions and terminal transitions, initializes from an imitation checkpoint, performs real Double-DQN updates, and reloads the reinforcement checkpoint.
+The ONNX test exports both checkpoint formats, runs ONNX structural validation, compares ONNX Runtime output with PyTorch output, checks the browser input/output contract, and verifies that the default model remains below 1 MB.
