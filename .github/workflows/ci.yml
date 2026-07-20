@@ -21,7 +21,12 @@ jobs:
         with:
           node-version: 22
 
-      - name: Run engine tests
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run JavaScript and Python engine tests
         run: npm test
 
       - name: Check JavaScript syntax
