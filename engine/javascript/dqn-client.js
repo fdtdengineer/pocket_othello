@@ -5,7 +5,7 @@ export class DqnClient {
     this.workerUrl = options.workerUrl
       || new URL('./dqn-worker.js', import.meta.url);
     this.runtimeModuleUrl = options.runtimeModuleUrl
-      || new URL('../../vendor/onnxruntime-web/ort.wasm.min.mjs', import.meta.url).href;
+      || new URL('../../vendor/onnxruntime-web/ort.wasm.bundle.min.mjs', import.meta.url).href;
     this.wasmBaseUrl = options.wasmBaseUrl
       || new URL('../../vendor/onnxruntime-web/', import.meta.url).href;
     this.modelUrl = options.modelUrl
