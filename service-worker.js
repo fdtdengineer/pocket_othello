@@ -1,10 +1,13 @@
-const CACHE_NAME = 'pocket-othello-v5';
+const CACHE_NAME = 'pocket-othello-v6';
 const LOCAL_ASSETS = [
   './',
   './index.html',
+  './benchmark.html',
   './style.css',
   './dqn.css',
+  './benchmark.css',
   './app.js',
+  './benchmark.js',
   './engine.js',
   './ai.js',
   './engine/javascript/rules.js',
@@ -14,6 +17,7 @@ const LOCAL_ASSETS = [
   './engine/javascript/dqn-core.js',
   './engine/javascript/dqn-client.js',
   './engine/javascript/dqn-worker.js',
+  './engine/javascript/dqn-benchmark.js',
   './online.js',
   './manifest.webmanifest',
   './icon.svg',
