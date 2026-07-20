@@ -37,7 +37,7 @@
 
         <article class="info-card">
           <span>Mode</span>
-          <strong id="modeText">CPU · Normal</strong>
+          <strong id="modeText">CPU · Normal · Black</strong>
         </article>
         <article class="info-card desktop-only">
           <span>How to play</span>
@@ -97,7 +97,7 @@
 
       <div id="modeChooser" class="mode-grid">
         <button id="cpuModeButton" class="mode-button" type="button">
-          <span class="mode-icon">◐</span><strong>vs CPU</strong><small>Easy, Normal, or Hard</small>
+          <span class="mode-icon">◐</span><strong>vs CPU</strong><small>Choose Black or White</small>
         </button>
         <button id="localModeButton" class="mode-button" type="button">
           <span class="mode-icon">●●</span><strong>Two Players</strong><small>Share this device</small>
@@ -105,6 +105,22 @@
         <button id="onlineModeButton" class="mode-button accent-mode" type="button">
           <span class="mode-icon">◎</span><strong>Online</strong><small>Create or join a room</small>
         </button>
+      </div>
+
+      <div id="cpuPanel" class="cpu-panel" hidden>
+        <button id="backFromCpuButton" class="text-button" type="button">← Back</button>
+        <h3>Choose your color</h3>
+        <p class="small-note">Black moves first. Choose White to let the CPU make the opening move.</p>
+        <div class="color-choice-grid" role="group" aria-label="Choose your color">
+          <button id="playBlackButton" class="color-choice-button" type="button">
+            <span class="choice-disc black-disc" aria-hidden="true"></span>
+            <span><strong>Play as Black</strong><small>You move first</small></span>
+          </button>
+          <button id="playWhiteButton" class="color-choice-button" type="button">
+            <span class="choice-disc white-disc" aria-hidden="true"></span>
+            <span><strong>Play as White</strong><small>CPU moves first</small></span>
+          </button>
+        </div>
       </div>
 
       <div id="onlinePanel" class="online-panel" hidden>
