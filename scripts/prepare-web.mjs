@@ -20,27 +20,22 @@ function parseOutput(argv) {
 
 const source = path.resolve('node_modules/onnxruntime-web/dist');
 const output = path.resolve(parseOutput(process.argv.slice(2)));
+const selected = [
+  'ort.wasm.bundle.min.mjs',
+  'ort-wasm-simd-threaded.wasm',
+];
+
 if (!fs.existsSync(source)) {
   throw new Error('onnxruntime-web is not installed. Run npm install first.');
+}
+for (const name of selected) {
+  if (!fs.existsSync(path.join(source, name))) {
+    throw new Error(`onnxruntime-web did not contain ${name}.`);
+  }
 }
 
 fs.rmSync(output, { recursive: true, force: true });
 fs.mkdirSync(output, { recursive: true });
-
-const selected = fs.readdirSync(source)
-  .filter((name) => (
-    /^ort\.wasm.*\.mjs$/.test(name)
-    || /^ort-wasm.*\.wasm$/.test(name)
-  ))
-  .sort();
-
-if (!selected.includes('ort.wasm.min.mjs')) {
-  throw new Error('onnxruntime-web did not contain ort.wasm.min.mjs.');
-}
-if (!selected.some((name) => name.endsWith('.wasm'))) {
-  throw new Error('onnxruntime-web did not contain a WASM binary.');
-}
-
 for (const name of selected) {
   fs.copyFileSync(path.join(source, name), path.join(output, name));
 }
