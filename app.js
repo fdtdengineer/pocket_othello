@@ -32,9 +32,13 @@ const elements = {
   modalBackdrop: document.querySelector('#modalBackdrop'),
   closeModalButton: document.querySelector('#closeModalButton'),
   modeChooser: document.querySelector('#modeChooser'),
+  cpuPanel: document.querySelector('#cpuPanel'),
   onlinePanel: document.querySelector('#onlinePanel'),
   waitingPanel: document.querySelector('#waitingPanel'),
   cpuModeButton: document.querySelector('#cpuModeButton'),
+  playBlackButton: document.querySelector('#playBlackButton'),
+  playWhiteButton: document.querySelector('#playWhiteButton'),
+  backFromCpuButton: document.querySelector('#backFromCpuButton'),
   localModeButton: document.querySelector('#localModeButton'),
   onlineModeButton: document.querySelector('#onlineModeButton'),
   backToModesButton: document.querySelector('#backToModesButton'),
@@ -65,6 +69,7 @@ for (let index = 0; index < 64; index += 1) {
 
 let state = freshState();
 let cpuDifficulty = localStorage.getItem('pocketOthelloDifficulty') || 'normal';
+let preferredHumanPlayer = localStorage.getItem('pocketOthelloColor') === 'white' ? WHITE : BLACK;
 let history = [];
 let cpuToken = 0;
 let online = null;
@@ -115,6 +120,12 @@ function canLocalPlayerMove() {
   return false;
 }
 
+function canUndo() {
+  if (history.length === 0 || state.mode === 'online' || state.gameOver) return false;
+  if (state.mode !== 'cpu') return true;
+  return history.some((snapshot) => snapshot.currentPlayer === snapshot.humanPlayer);
+}
+
 function render() {
   const counts = countPieces(state.board);
   elements.blackScore.textContent = counts.black;
@@ -140,7 +151,7 @@ function render() {
   if (state.mode === 'cpu') {
     elements.blackLabel.textContent = state.humanPlayer === BLACK ? 'You · Black' : 'CPU · Black';
     elements.whiteLabel.textContent = state.humanPlayer === WHITE ? 'You · White' : 'CPU · White';
-    elements.modeText.textContent = `CPU · ${capitalize(cpuDifficulty)}`;
+    elements.modeText.textContent = `CPU · ${capitalize(cpuDifficulty)} · ${state.humanPlayer === BLACK ? 'Black' : 'White'}`;
   } else if (state.mode === 'local') {
     elements.blackLabel.textContent = 'Player 1 · Black';
     elements.whiteLabel.textContent = 'Player 2 · White';
@@ -151,7 +162,7 @@ function render() {
     elements.modeText.textContent = `Online · ${state.onlineRole === 'host' ? 'Host' : 'Guest'}`;
   }
 
-  elements.undoButton.disabled = history.length === 0 || state.mode === 'online' || state.gameOver;
+  elements.undoButton.disabled = !canUndo();
   updateStatusFromState();
 }
 
@@ -242,25 +253,35 @@ function maybeRunCpu() {
 function resetGame(mode = state.mode) {
   cpuToken += 1;
   history = [];
+  const cpuFields = mode === 'cpu' ? {
+    humanPlayer: state.mode === 'cpu' ? state.humanPlayer : preferredHumanPlayer,
+  } : {};
   const onlineFields = mode === 'online' ? {
     onlineRole: state.onlineRole,
     connected: state.connected,
   } : {};
-  state = freshState({ mode, ...onlineFields });
+  state = freshState({ mode, ...cpuFields, ...onlineFields });
   render();
   if (mode === 'online' && state.onlineRole === 'host') broadcastState();
   maybeRunCpu();
 }
 
-function startCpuMode() {
+function startCpuMode(humanPlayer = preferredHumanPlayer) {
+  cpuToken += 1;
+  elements.thinkingBadge.hidden = true;
   stopOnline();
-  state = freshState({ mode: 'cpu', humanPlayer: BLACK });
+  preferredHumanPlayer = humanPlayer === WHITE ? WHITE : BLACK;
+  localStorage.setItem('pocketOthelloColor', preferredHumanPlayer === WHITE ? 'white' : 'black');
+  state = freshState({ mode: 'cpu', humanPlayer: preferredHumanPlayer });
   history = [];
   closeModal();
   render();
+  maybeRunCpu();
 }
 
 function startLocalMode() {
+  cpuToken += 1;
+  elements.thinkingBadge.hidden = true;
   stopOnline();
   state = freshState({ mode: 'local' });
   history = [];
@@ -279,11 +300,14 @@ function closeModal() {
 
 function showModalView(view) {
   elements.modeChooser.hidden = view !== 'modes';
+  elements.cpuPanel.hidden = view !== 'cpu';
   elements.onlinePanel.hidden = view !== 'online';
   elements.waitingPanel.hidden = view !== 'waiting';
 }
 
 function setupOnlineSession() {
+  cpuToken += 1;
+  elements.thinkingBadge.hidden = true;
   stopOnline();
   online = new OnlineSession();
   online.addEventListener('ready', (event) => {
@@ -438,14 +462,14 @@ for (const button of document.querySelectorAll('[data-difficulty]')) {
       other.classList.toggle('is-selected', other === button);
     }
     if (state.mode === 'cpu') {
-      elements.modeText.textContent = `CPU · ${capitalize(cpuDifficulty)}`;
+      elements.modeText.textContent = `CPU · ${capitalize(cpuDifficulty)} · ${state.humanPlayer === BLACK ? 'Black' : 'White'}`;
       resetGame('cpu');
     }
   });
 }
 
 elements.undoButton.addEventListener('click', () => {
-  if (!history.length || state.mode === 'online') return;
+  if (!canUndo()) return;
   cpuToken += 1;
   state = history.pop();
   if (state.mode === 'cpu' && state.currentPlayer !== state.humanPlayer && history.length) state = history.pop();
@@ -464,7 +488,10 @@ elements.menuButton.addEventListener('click', () => openModal('modes'));
 elements.onlineButton.addEventListener('click', () => openModal('online'));
 elements.closeModalButton.addEventListener('click', closeModal);
 elements.modalBackdrop.addEventListener('click', (event) => { if (event.target === elements.modalBackdrop) closeModal(); });
-elements.cpuModeButton.addEventListener('click', startCpuMode);
+elements.cpuModeButton.addEventListener('click', () => showModalView('cpu'));
+elements.playBlackButton.addEventListener('click', () => startCpuMode(BLACK));
+elements.playWhiteButton.addEventListener('click', () => startCpuMode(WHITE));
+elements.backFromCpuButton.addEventListener('click', () => showModalView('modes'));
 elements.localModeButton.addEventListener('click', startLocalMode);
 elements.onlineModeButton.addEventListener('click', () => showModalView('online'));
 elements.backToModesButton.addEventListener('click', () => showModalView('modes'));
@@ -473,7 +500,14 @@ elements.joinRoomButton.addEventListener('click', joinOnlineGame);
 elements.roomCodeInput.addEventListener('input', () => { elements.roomCodeInput.value = normalizeRoomCode(elements.roomCodeInput.value); });
 elements.roomCodeInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') joinOnlineGame(); });
 elements.shareRoomButton.addEventListener('click', shareRoom);
-elements.cancelOnlineButton.addEventListener('click', () => { stopOnline(); showModalView('online'); startCpuMode(); openModal('online'); });
+elements.cancelOnlineButton.addEventListener('click', () => {
+  stopOnline();
+  state = freshState({ mode: 'cpu', humanPlayer: preferredHumanPlayer });
+  history = [];
+  render();
+  maybeRunCpu();
+  showModalView('online');
+});
 
 const invitedRoom = normalizeRoomCode(new URLSearchParams(window.location.search).get('room'));
 if (invitedRoom.length === 6) {
