@@ -1,8 +1,9 @@
-const CACHE_NAME = 'pocket-othello-v4';
+const CACHE_NAME = 'pocket-othello-v5';
 const LOCAL_ASSETS = [
   './',
   './index.html',
   './style.css',
+  './dqn.css',
   './app.js',
   './engine.js',
   './ai.js',
@@ -10,19 +11,51 @@ const LOCAL_ASSETS = [
   './engine/javascript/evaluation.js',
   './engine/javascript/search.js',
   './engine/javascript/index.js',
+  './engine/javascript/dqn-core.js',
+  './engine/javascript/dqn-client.js',
+  './engine/javascript/dqn-worker.js',
   './online.js',
   './manifest.webmanifest',
   './icon.svg',
 ];
+const OPTIONAL_ASSETS = [
+  './engine/models/othello_dqn.onnx',
+  './engine/models/othello_dqn.json',
+];
+const RUNTIME_MANIFEST = './vendor/onnxruntime-web/manifest.json';
+
+async function cacheOptionalAssets(cache) {
+  await Promise.allSettled(OPTIONAL_ASSETS.map((asset) => cache.add(asset)));
+
+  try {
+    const response = await fetch(RUNTIME_MANIFEST, { cache: 'no-cache' });
+    if (!response.ok) return;
+    const manifest = await response.clone().json();
+    await cache.put(RUNTIME_MANIFEST, response);
+    if (!Array.isArray(manifest.files)) return;
+    await Promise.allSettled(
+      manifest.files.map((file) => cache.add(`./vendor/onnxruntime-web/${file}`)),
+    );
+  } catch {
+    // DQN assets are optional. The browser falls back to the Hard CPU.
+  }
+}
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(LOCAL_ASSETS)));
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await cache.addAll(LOCAL_ASSETS);
+      await cacheOptionalAssets(cache);
+    }),
+  );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+    caches.keys().then((keys) => Promise.all(
+      keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)),
+    )),
   );
   self.clients.claim();
 });
@@ -42,6 +75,8 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match('./index.html')))
+      .catch(() => caches.match(request).then(
+        (cached) => cached || caches.match('./index.html'),
+      )),
   );
 });
