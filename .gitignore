@@ -1,4 +1,6 @@
 node_modules/
+_site/
+vendor/onnxruntime-web/
 
 __pycache__/
 *.py[cod]
@@ -11,5 +13,6 @@ engine/python/data/
 *.pt
 *.pth
 *.onnx
+!engine/models/*.onnx
 
 .DS_Store
