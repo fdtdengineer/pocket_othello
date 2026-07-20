@@ -4,12 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pocket-othello-engine"
-version = "0.5.0"
-description = "Othello rules, compact Dueling Double DQN, imitation, and self-play training"
+version = "0.6.0"
+description = "Othello Dueling Double DQN training and browser-ready ONNX export"
 requires-python = ">=3.10"
 
 [project.optional-dependencies]
 dqn = ["torch>=2.0,<3"]
+export = ["numpy>=1.26", "onnx>=1.16", "onnxruntime>=1.18"]
+all = [
+  "torch>=2.0,<3",
+  "numpy>=1.26",
+  "onnx>=1.16",
+  "onnxruntime>=1.18",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
