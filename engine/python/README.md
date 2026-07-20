@@ -1,6 +1,6 @@
 # Python/PyTorch DQN Engine
 
-This directory contains the Python rules layer, compact PyTorch DQN building blocks, and the validated teacher-data interface for a future browser-deployable Othello agent.
+This directory contains the Python rules layer, compact PyTorch DQN components, validated Hard-CPU teacher data, and supervised imitation pretraining for a future browser-deployable Othello agent.
 
 ## Current layout
 
@@ -8,23 +8,21 @@ This directory contains the Python rules layer, compact PyTorch DQN building blo
 engine/python/
 ├── pyproject.toml
 ├── othello/
-│   ├── __init__.py
-│   └── rules.py          # Dependency-free rules matching JavaScript
+│   └── rules.py
 ├── dqn/
-│   ├── __init__.py
 │   ├── encoding.py       # Player-relative 4×8×8 observations
 │   ├── model.py          # Compact residual dueling Q-network
-│   ├── replay_buffer.py  # CPU-backed replay memory
+│   ├── replay_buffer.py
 │   ├── agent.py          # Legal action selection and Double-DQN updates
-│   └── teacher_data.py   # Validated JSONL loader and imitation dataset
-├── tests/
-│   ├── test_rules.py
-│   ├── test_dqn.py
-│   └── test_teacher_data.py
-└── README.md
+│   ├── teacher_data.py   # Validated JSONL loader
+│   ├── symmetry.py       # Eight rotations/reflections
+│   └── imitation.py      # Supervised pretraining CLI
+└── tests/
+    ├── test_rules.py
+    ├── test_dqn.py
+    ├── test_teacher_data.py
+    └── test_imitation.py
 ```
-
-Training, self-play, evaluation, and ONNX export remain independent from the browser UI.
 
 ## Installation
 
@@ -39,38 +37,17 @@ python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 python -m pip install -e engine/python --no-deps
 ```
 
-## Observation contract
+## Observation and model
 
-`encode_observation(board, player)` returns a `4 × 8 × 8` tensor:
+`encode_observation(board, player)` returns a player-relative `4 × 8 × 8` tensor containing own discs, opponent discs, legal actions, and game progress. The default `DuelingQNetwork` has 56,978 trainable parameters, about 228 KB of FP32 weights before ONNX packaging or quantization.
 
-1. current player's discs
-2. opponent's discs
-3. legal-action mask
-4. constant game-progress plane
-
-The board is always encoded from the acting player's perspective. One model therefore handles both black and white.
-
-## Compact model
-
-The default `DuelingQNetwork` uses 32 feature channels, three residual blocks, one scalar value head, one spatial 8×8 advantage head, and 64 output Q-values. It has 56,978 trainable parameters, corresponding to about 228 KB of FP32 weights before ONNX packaging or quantization.
-
-## Two-player Double DQN
-
-Each replay transition stores a `bootstrap_sign`:
-
-- `-1` when play passes to the opponent
-- `+1` when the opponent must pass and the same player moves again
-- terminal states do not bootstrap
+Each replay transition stores a `bootstrap_sign`: `-1` when the opponent acts next and `+1` when an opponent pass lets the same player act again.
 
 ```text
 target = reward + gamma * bootstrap_sign * next_value
 ```
 
-The online network selects the next legal action and the target network evaluates it. Illegal moves are masked before every `argmax`.
-
 ## Hard-CPU teacher data
-
-Generate labeled positions from the current JavaScript Hard CPU:
 
 ```bash
 npm run generate:teacher -- \
@@ -82,29 +59,34 @@ npm run generate:teacher -- \
   --exploration 0.20
 ```
 
-Each JSONL record contains the 64-cell board, acting player, Hard-CPU action, exact 64-element legal mask, game number, and ply. A neighboring `.meta.json` file records the generator settings and counts. Generated datasets are ignored by Git.
+Every JSONL record contains the board, acting player, Hard-CPU action, exact legal mask, game number, and ply. Exploration affects only the move used to advance the generated game; the stored label always comes from `chooseHardMove`.
 
-`TeacherExample` validates every record by recomputing the legal mask with the Python rules engine. `TeacherDataset` then exposes `(observation, action)` pairs suitable for supervised imitation learning:
+`TeacherExample` recomputes the legal mask with the Python rules engine. `TeacherDataset` exposes validated `(observation, action)` pairs.
 
-```python
-from dqn import TeacherDataset
+## Imitation pretraining
 
-dataset = TeacherDataset.from_jsonl("engine/python/data/teacher.jsonl")
-observation, action = dataset[0]
+Train the compact network to reproduce Hard-CPU moves:
+
+```bash
+npm run train:imitation -- \
+  --data engine/python/data/teacher.jsonl \
+  --output engine/python/checkpoints/imitation.pt \
+  --epochs 20 \
+  --batch-size 128 \
+  --augmentation random \
+  --device auto
 ```
 
-Exploration controls only the move used to advance the generated game. The stored label always comes from `chooseHardMove`, allowing diverse positions without replacing the teacher target.
+The trainer:
 
-## Shared rules contract
+- splits complete games between training and validation when multiple games are available
+- masks illegal logits before cross-entropy loss and accuracy calculation
+- supports no augmentation, one random symmetry per sample, or all eight symmetries
+- saves the best validation checkpoint with model dimensions, training settings, metrics, and weights
 
-The Python implementation follows `engine/README.md` and the JavaScript rules exactly:
+The eight transformations apply the same rotation/reflection to all observation planes and the row-major teacher action. The resulting action is tested to remain legal in the transformed legal-mask plane.
 
-- flat row-major board with 64 cells
-- `0` empty, `1` black, `-1` white
-- action indices from `0` to `63`
-- automatic pass handling
-- terminal state when neither player has a legal move
-- a 64-element boolean legal-action mask
+The imitation checkpoint is an initialization for later Double-DQN training, not the final reinforcement-learning policy.
 
 ## Validation
 
@@ -112,6 +94,7 @@ The Python implementation follows `engine/README.md` and the JavaScript rules ex
 npm test
 npm run test:dqn
 npm run test:teacher
+npm run test:imitation
 ```
 
-The teacher-data test runs the JavaScript generator twice with the same seed, requires byte-identical JSONL and metadata, validates every label against Python rules, checks dataset tensor output, and rejects corrupted masks.
+The imitation smoke test generates teacher data, verifies symmetry/action consistency, performs real optimizer updates, and reloads the saved checkpoint.
