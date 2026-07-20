@@ -3,7 +3,10 @@ import {
   BLACK,
   WHITE,
   EMPTY,
+  MAX_SEARCH_TIME_MS,
+  TURN_RESPONSE_LIMIT_MS,
   applyMove,
+  clampSearchTimeMs,
   countPieces,
   createInitialBoard,
   getFlips,
@@ -11,8 +14,8 @@ import {
   getNextTurn,
   isGameOver,
   winner,
-} from '../engine.js';
-import { chooseCpuMove } from '../ai.js';
+  chooseCpuMove,
+} from '../engine/javascript/index.js';
 
 const board = createInitialBoard();
 assert.deepEqual(countPieces(board), { black: 2, white: 2, empty: 60 });
@@ -33,8 +36,17 @@ assert.equal(isGameOver(fullBlack), true);
 assert.equal(winner(fullBlack), BLACK);
 assert.equal(getNextTurn(fullBlack, BLACK).currentPlayer, EMPTY);
 
+assert.equal(TURN_RESPONSE_LIMIT_MS, 150);
+assert.ok(MAX_SEARCH_TIME_MS < TURN_RESPONSE_LIMIT_MS);
+assert.equal(clampSearchTimeMs(999), MAX_SEARCH_TIME_MS);
+assert.equal(clampSearchTimeMs(1), 20);
+
 for (const difficulty of ['easy', 'normal', 'hard']) {
-  const move = chooseCpuMove(board, BLACK, difficulty, { random: () => 0.2, timeLimitMs: 120, maxDepth: 3 });
+  const move = chooseCpuMove(board, BLACK, difficulty, {
+    random: () => 0.2,
+    timeLimitMs: 120,
+    maxDepth: 3,
+  });
   assert.ok(move, `${difficulty} should return a move`);
   assert.ok([19, 26, 37, 44].includes(move.index), `${difficulty} returned an illegal move`);
 }
