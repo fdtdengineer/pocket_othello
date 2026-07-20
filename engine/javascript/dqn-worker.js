@@ -15,7 +15,7 @@ async function loadSession(options = {}) {
 
   sessionPromise = (async () => {
     const runtimeModuleUrl = options.runtimeModuleUrl
-      || new URL('../../vendor/onnxruntime-web/ort.wasm.min.mjs', import.meta.url).href;
+      || new URL('../../vendor/onnxruntime-web/ort.wasm.bundle.min.mjs', import.meta.url).href;
     const wasmBaseUrl = options.wasmBaseUrl
       || new URL('../../vendor/onnxruntime-web/', import.meta.url).href;
     const modelUrl = options.modelUrl
@@ -34,11 +34,10 @@ async function loadSession(options = {}) {
       loadedMetadata = null;
     }
 
-    const session = await ortModule.InferenceSession.create(modelUrl, {
+    return ortModule.InferenceSession.create(modelUrl, {
       executionProviders: ['wasm'],
       graphOptimizationLevel: 'all',
     });
-    return session;
   })();
 
   try {
