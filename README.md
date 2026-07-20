@@ -48,6 +48,8 @@ Select JavaScript and paste the complete contents of `engine/codingame/othello.j
 
 The DQN uses a player-relative `4 × 8 × 8` observation containing own discs, opponent discs, legal moves, and game progress. Its 64 outputs correspond to row-major board actions. The default residual dueling network has 56,978 trainable parameters, approximately 228 KB of FP32 weights before ONNX packaging.
 
+For complete local setup and training instructions using Conda, including Windows Command Prompt and PowerShell examples, see [`engine/python/LOCAL_TRAINING.md`](engine/python/LOCAL_TRAINING.md).
+
 ### 1. Generate Hard-CPU teacher data
 
 ```bash
@@ -148,6 +150,7 @@ CI additionally creates an ONNX fixture and executes it through the JavaScript `
 │       ├── othello/
 │       ├── dqn/
 │       ├── tests/
+│       ├── LOCAL_TRAINING.md
 │       └── README.md
 ├── scripts/
 │   └── prepare-web.mjs
