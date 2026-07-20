@@ -21,6 +21,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install browser dependencies
+        run: npm install --no-audit --no-fund
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -52,6 +55,18 @@ jobs:
 
       - name: Export and validate ONNX model
         run: npm run test:onnx
+
+      - name: Run ONNX Runtime Web inference
+        run: |
+          python engine/python/tests/create_browser_fixture.py /tmp/othello_dqn.onnx
+          npm run test:ort-web -- /tmp/othello_dqn.onnx
+
+      - name: Prepare static ONNX Runtime assets
+        run: |
+          npm run prepare:web -- --output /tmp/onnxruntime-web
+          test -f /tmp/onnxruntime-web/ort.wasm.bundle.min.mjs
+          test -f /tmp/onnxruntime-web/ort-wasm-simd-threaded.wasm
+          test -f /tmp/onnxruntime-web/manifest.json
 
       - name: Check JavaScript syntax
         run: npm run check

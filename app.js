@@ -11,7 +11,11 @@ import {
   winner,
 } from './engine.js';
 import { chooseCpuMove } from './ai.js';
+import { DqnClient } from './engine/javascript/dqn-client.js';
 import { OnlineSession, normalizeRoomCode } from './online.js';
+
+const CPU_DIFFICULTIES = new Set(['easy', 'normal', 'hard', 'dqn']);
+const storedDifficulty = localStorage.getItem('pocketOthelloDifficulty');
 
 const elements = {
   board: document.querySelector('#board'),
@@ -67,13 +71,16 @@ for (let index = 0; index < 64; index += 1) {
   elements.board.append(button);
 }
 
+const dqnClient = new DqnClient();
 let state = freshState();
-let cpuDifficulty = localStorage.getItem('pocketOthelloDifficulty') || 'normal';
+let cpuDifficulty = CPU_DIFFICULTIES.has(storedDifficulty) ? storedDifficulty : 'normal';
 let preferredHumanPlayer = localStorage.getItem('pocketOthelloColor') === 'white' ? WHITE : BLACK;
 let history = [];
 let cpuToken = 0;
 let online = null;
 let toastTimer = null;
+let dqnUnavailable = false;
+let dqnWarningShown = false;
 
 function freshState(overrides = {}) {
   return {
@@ -126,6 +133,10 @@ function canUndo() {
   return history.some((snapshot) => snapshot.currentPlayer === snapshot.humanPlayer);
 }
 
+function difficultyLabel(value) {
+  return value === 'dqn' ? 'DQN' : value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 function render() {
   const counts = countPieces(state.board);
   elements.blackScore.textContent = counts.black;
@@ -133,7 +144,9 @@ function render() {
   elements.blackCard.classList.toggle('is-active', state.currentPlayer === BLACK && !state.gameOver);
   elements.whiteCard.classList.toggle('is-active', state.currentPlayer === WHITE && !state.gameOver);
 
-  const legal = canLocalPlayerMove() ? new Set(getLegalMoves(state.board, state.currentPlayer).map((move) => move.index)) : new Set();
+  const legal = canLocalPlayerMove()
+    ? new Set(getLegalMoves(state.board, state.currentPlayer).map((move) => move.index))
+    : new Set();
   for (let index = 0; index < 64; index += 1) {
     const cell = cells[index];
     cell.replaceChildren();
@@ -151,7 +164,7 @@ function render() {
   if (state.mode === 'cpu') {
     elements.blackLabel.textContent = state.humanPlayer === BLACK ? 'You · Black' : 'CPU · Black';
     elements.whiteLabel.textContent = state.humanPlayer === WHITE ? 'You · White' : 'CPU · White';
-    elements.modeText.textContent = `CPU · ${capitalize(cpuDifficulty)} · ${state.humanPlayer === BLACK ? 'Black' : 'White'}`;
+    elements.modeText.textContent = `CPU · ${difficultyLabel(cpuDifficulty)} · ${state.humanPlayer === BLACK ? 'Black' : 'White'}`;
   } else if (state.mode === 'local') {
     elements.blackLabel.textContent = 'Player 1 · Black';
     elements.whiteLabel.textContent = 'Player 2 · White';
@@ -187,17 +200,19 @@ function updateStatusFromState() {
   }
 
   if (state.mode === 'cpu') {
-    setStatus(state.currentPlayer === state.humanPlayer ? 'Your turn' : 'CPU turn', state.currentPlayer === state.humanPlayer ? 'ok' : 'waiting');
+    setStatus(
+      state.currentPlayer === state.humanPlayer ? 'Your turn' : 'CPU turn',
+      state.currentPlayer === state.humanPlayer ? 'ok' : 'waiting',
+    );
   } else if (state.mode === 'online') {
     const myPlayer = state.onlineRole === 'host' ? BLACK : WHITE;
-    setStatus(state.currentPlayer === myPlayer ? 'Your turn' : "Opponent's turn", state.currentPlayer === myPlayer ? 'ok' : 'waiting');
+    setStatus(
+      state.currentPlayer === myPlayer ? 'Your turn' : "Opponent's turn",
+      state.currentPlayer === myPlayer ? 'ok' : 'waiting',
+    );
   } else {
     setStatus(`${playerName(state.currentPlayer)} to move`);
   }
-}
-
-function capitalize(value) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function onCellClick(index) {
@@ -232,6 +247,38 @@ function commitMove(move, player, options = {}) {
   render();
 }
 
+async function chooseConfiguredCpuMove(board, player) {
+  const legalMoves = getLegalMoves(board, player);
+  if (legalMoves.length === 0) return null;
+
+  if (cpuDifficulty === 'dqn' && !dqnUnavailable) {
+    try {
+      const result = await dqnClient.chooseIndex(board, player, legalMoves);
+      const move = legalMoves.find((candidate) => candidate.index === result?.index);
+      if (!move) throw new Error('DQN returned an illegal action.');
+      return move;
+    } catch (error) {
+      dqnUnavailable = true;
+      console.warn('DQN inference failed; falling back to Hard CPU.', error);
+      if (!dqnWarningShown) {
+        dqnWarningShown = true;
+        showToast('DQN model unavailable · using Hard CPU');
+      }
+    }
+  }
+
+  const fallbackDifficulty = cpuDifficulty === 'dqn' ? 'hard' : cpuDifficulty;
+  return chooseCpuMove(board, player, fallbackDifficulty, {
+    timeLimitMs: fallbackDifficulty === 'hard' ? 120 : 80,
+  });
+}
+
+function cpuDelayMs() {
+  if (cpuDifficulty === 'dqn') return 40;
+  if (cpuDifficulty === 'hard') return 180;
+  return 320;
+}
+
 function maybeRunCpu() {
   cpuToken += 1;
   const token = cpuToken;
@@ -240,14 +287,39 @@ function maybeRunCpu() {
     return;
   }
 
+  const expectedPlayer = state.currentPlayer;
+  const expectedVersion = state.version;
+  const board = state.board.slice();
   elements.thinkingBadge.hidden = false;
-  setTimeout(() => {
-    if (token !== cpuToken || state.mode !== 'cpu' || state.gameOver || state.currentPlayer === state.humanPlayer) return;
-    const move = chooseCpuMove(state.board, state.currentPlayer, cpuDifficulty, { timeLimitMs: cpuDifficulty === 'hard' ? 720 : 250 });
-    elements.thinkingBadge.hidden = true;
-    if (move) commitMove(move, state.currentPlayer, { saveHistory: true });
-    if (!state.gameOver && state.currentPlayer !== state.humanPlayer) maybeRunCpu();
-  }, cpuDifficulty === 'hard' ? 180 : 320);
+
+  setTimeout(async () => {
+    if (
+      token !== cpuToken
+      || state.mode !== 'cpu'
+      || state.gameOver
+      || state.currentPlayer !== expectedPlayer
+      || state.version !== expectedVersion
+    ) return;
+
+    try {
+      const move = await chooseConfiguredCpuMove(board, expectedPlayer);
+      if (
+        token !== cpuToken
+        || state.mode !== 'cpu'
+        || state.gameOver
+        || state.currentPlayer !== expectedPlayer
+        || state.version !== expectedVersion
+      ) return;
+
+      elements.thinkingBadge.hidden = true;
+      if (move) commitMove(move, expectedPlayer, { saveHistory: true });
+      if (!state.gameOver && state.currentPlayer !== state.humanPlayer) maybeRunCpu();
+    } catch (error) {
+      elements.thinkingBadge.hidden = true;
+      console.error('CPU move failed.', error);
+      showToast('CPU move failed. Start a new game to retry.');
+    }
+  }, cpuDelayMs());
 }
 
 function resetGame(mode = state.mode) {
@@ -313,7 +385,9 @@ function setupOnlineSession() {
   online.addEventListener('ready', (event) => {
     const { roomCode } = event.detail;
     elements.roomCodeText.textContent = roomCode;
-    elements.onlineStatusText.textContent = online.role === 'host' ? 'Keep this page open while your opponent joins.' : 'Connecting to the host…';
+    elements.onlineStatusText.textContent = online.role === 'host'
+      ? 'Keep this page open while your opponent joins.'
+      : 'Connecting to the host…';
   });
   online.addEventListener('connected', () => {
     state.connected = true;
@@ -428,7 +502,11 @@ function serializableState() {
 }
 
 function broadcastState(options = {}) {
-  online?.send({ type: 'state', state: serializableState(), assignment: options.includeAssignment ? WHITE : undefined });
+  online?.send({
+    type: 'state',
+    state: serializableState(),
+    assignment: options.includeAssignment ? WHITE : undefined,
+  });
 }
 
 function stopOnline() {
@@ -461,8 +539,13 @@ for (const button of document.querySelectorAll('[data-difficulty]')) {
     for (const other of document.querySelectorAll('[data-difficulty]')) {
       other.classList.toggle('is-selected', other === button);
     }
+    if (cpuDifficulty === 'dqn') {
+      dqnUnavailable = false;
+      dqnWarningShown = false;
+      dqnClient.ensureReady().catch(() => {});
+    }
     if (state.mode === 'cpu') {
-      elements.modeText.textContent = `CPU · ${capitalize(cpuDifficulty)} · ${state.humanPlayer === BLACK ? 'Black' : 'White'}`;
+      elements.modeText.textContent = `CPU · ${difficultyLabel(cpuDifficulty)} · ${state.humanPlayer === BLACK ? 'Black' : 'White'}`;
       resetGame('cpu');
     }
   });
@@ -472,7 +555,9 @@ elements.undoButton.addEventListener('click', () => {
   if (!canUndo()) return;
   cpuToken += 1;
   state = history.pop();
-  if (state.mode === 'cpu' && state.currentPlayer !== state.humanPlayer && history.length) state = history.pop();
+  if (state.mode === 'cpu' && state.currentPlayer !== state.humanPlayer && history.length) {
+    state = history.pop();
+  }
   elements.thinkingBadge.hidden = true;
   render();
 });
@@ -487,7 +572,9 @@ elements.newGameButton.addEventListener('click', () => {
 elements.menuButton.addEventListener('click', () => openModal('modes'));
 elements.onlineButton.addEventListener('click', () => openModal('online'));
 elements.closeModalButton.addEventListener('click', closeModal);
-elements.modalBackdrop.addEventListener('click', (event) => { if (event.target === elements.modalBackdrop) closeModal(); });
+elements.modalBackdrop.addEventListener('click', (event) => {
+  if (event.target === elements.modalBackdrop) closeModal();
+});
 elements.cpuModeButton.addEventListener('click', () => showModalView('cpu'));
 elements.playBlackButton.addEventListener('click', () => startCpuMode(BLACK));
 elements.playWhiteButton.addEventListener('click', () => startCpuMode(WHITE));
@@ -497,8 +584,12 @@ elements.onlineModeButton.addEventListener('click', () => showModalView('online'
 elements.backToModesButton.addEventListener('click', () => showModalView('modes'));
 elements.createRoomButton.addEventListener('click', hostOnlineGame);
 elements.joinRoomButton.addEventListener('click', joinOnlineGame);
-elements.roomCodeInput.addEventListener('input', () => { elements.roomCodeInput.value = normalizeRoomCode(elements.roomCodeInput.value); });
-elements.roomCodeInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') joinOnlineGame(); });
+elements.roomCodeInput.addEventListener('input', () => {
+  elements.roomCodeInput.value = normalizeRoomCode(elements.roomCodeInput.value);
+});
+elements.roomCodeInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') joinOnlineGame();
+});
 elements.shareRoomButton.addEventListener('click', shareRoom);
 elements.cancelOnlineButton.addEventListener('click', () => {
   stopOnline();
@@ -517,6 +608,11 @@ if (invitedRoom.length === 6) {
 
 render();
 
+if (cpuDifficulty === 'dqn') dqnClient.ensureReady().catch(() => {});
+window.addEventListener('pagehide', () => dqnClient.destroy());
+
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(() => {}));
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+  });
 }

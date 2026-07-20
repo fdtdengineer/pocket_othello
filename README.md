@@ -1,6 +1,6 @@
 # Pocket Othello
 
-A responsive Othello/Reversi web game for iPhone, Android, and desktop browsers. It is built with plain HTML, CSS, and JavaScript and is ready for GitHub Pages.
+A responsive Othello/Reversi web game for iPhone, Android, and desktop browsers. The game UI uses plain HTML, CSS, and JavaScript and is deployed with GitHub Pages.
 
 ## Play Online
 
@@ -9,17 +9,16 @@ https://fdtdengineer.github.io/pocket_othello/
 ## Features
 
 - Standard 8×8 Othello rules, legal-move hints, pass handling, and score tracking
-- CPU opponents with Easy, Normal, and Hard difficulty levels
+- Easy, Normal, Hard, and on-device DQN CPU opponents
 - Time-bounded iterative-deepening alpha-beta search
-- Local two-player mode on one device
-- Online two-player matches using a six-character room code
-- Direct browser-to-browser game synchronization with PeerJS/WebRTC
+- ONNX Runtime Web inference in a dedicated Web Worker
+- Safe Hard-CPU fallback when a trained ONNX model is not deployed
+- Local two-player and browser-to-browser online modes
 - Responsive mobile layout with iPhone safe-area and Safari toolbar clearance
-- Installable PWA and offline CPU/local play
+- Installable PWA with optional offline DQN runtime/model caching
 - Standalone CodinGame validation bot
-- Pure-Python rules engine with JavaScript transition parity tests
-- Compact PyTorch Dueling Double-DQN building blocks
-- No browser build process
+- JavaScript/Python rules parity tests
+- PyTorch teacher-data, imitation, reinforcement, and ONNX export pipeline
 
 ## Engine Architecture
 
@@ -28,52 +27,68 @@ The reusable game and AI logic lives under `engine/`:
 - `engine/javascript/rules.js`: legal moves, transitions, pass handling, and terminal rules
 - `engine/javascript/evaluation.js`: heuristic position evaluation
 - `engine/javascript/search.js`: Easy, Normal, and Hard agents
-- `engine/javascript/index.js`: stable JavaScript entry point
+- `engine/javascript/dqn-core.js`: browser observation encoding and legal Q-value selection
+- `engine/javascript/dqn-client.js`: asynchronous Web Worker client
+- `engine/javascript/dqn-worker.js`: ONNX Runtime Web inference
 - `engine/codingame/othello.js`: standalone CodinGame JavaScript submission
-- `engine/python/othello/rules.py`: dependency-free Python rules with the same representation and transitions
-- `engine/python/dqn/`: compact observation, model, replay-buffer, and Double-DQN utilities
+- `engine/python/`: verified rules, Dueling Double DQN, training, and ONNX export
+- `engine/models/`: deployable ONNX model and metadata
 
-The root `engine.js` and `ai.js` files are compatibility entry points for the existing web app. They contain no engine implementation and only re-export modules from `engine/javascript/`.
-
-See [`engine/README.md`](engine/README.md) for the shared board representation, action-space contract, and cross-language validation design.
+The root `engine.js` and `ai.js` files remain compatibility entry points for the existing web app.
 
 ## CodinGame Validation
 
-The heuristic search agent can be tested directly in the CodinGame Othello arena:
+Open the CodinGame Othello arena:
 
 https://www.codingame.com/multiplayer/bot-programming/othello-1
 
-1. Open the arena and select JavaScript.
-2. Copy the complete contents of `engine/codingame/othello.js`.
-3. Paste it into the CodinGame editor and run the test cases or submit it to the arena.
+Select JavaScript and paste the complete contents of `engine/codingame/othello.js`. The standalone bot uses a 100 ms search budget under the normal 150 ms turn limit and validates its output against the referee-provided legal moves.
 
-The file is dependency-free and requires no bundling. CodinGame allows 150 ms per normal turn; the bot uses a 100 ms search budget and validates its selected coordinate against the referee-provided legal-action list before printing it.
+## DQN Pipeline
 
-## Python/PyTorch DQN
+The DQN uses a player-relative `4 × 8 × 8` observation containing own discs, opponent discs, legal moves, and game progress. Its 64 outputs correspond to row-major board actions. The default residual dueling network has 56,978 trainable parameters, approximately 228 KB of FP32 weights before ONNX packaging.
 
-The Python rules and initial DQN core are implemented under `engine/python/`. JavaScript, Python, and CodinGame implementations share these conventions:
+### 1. Generate Hard-CPU teacher data
 
-- flat row-major board with 64 cells
-- `0` for empty, `1` for black, and `-1` for white
-- action index `row * 8 + column`, from `0` to `63`
-- a fixed 64-action output with illegal-action masking
-- automatic pass handling and the same terminal-state definition
+```bash
+npm run generate:teacher -- \
+  --games 1000 \
+  --output engine/python/data/teacher.jsonl
+```
 
-The DQN input is a player-relative `4 × 8 × 8` tensor containing own discs, opponent discs, legal moves, and game progress. The default residual dueling network has 56,978 trainable parameters, approximately 228 KB of FP32 weights. It includes signed zero-sum Double-DQN targets, replay memory, epsilon-greedy legal action selection, target-network updates, and a tested optimizer step.
+### 2. Imitation pretraining
 
-Training loops, teacher-data generation, self-play, evaluation, ONNX export, and browser integration are subsequent stages.
+```bash
+npm run train:imitation -- \
+  --data engine/python/data/teacher.jsonl \
+  --output engine/python/checkpoints/imitation.pt
+```
 
-## Online Matches
+### 3. Mixed-opponent reinforcement training
 
-One player selects **Online → Create Room** and shares the six-character code. The other player opens the same site, selects **Online**, enters the code, and joins.
+```bash
+npm run train:reinforcement -- \
+  --init-checkpoint engine/python/checkpoints/imitation.pt \
+  --output engine/python/checkpoints/reinforcement.pt
+```
 
-Online matches use PeerJS Cloud for connection signaling and WebRTC for the game data. A small number of restrictive networks or symmetric NAT configurations may require a TURN server and can fail to connect.
+### 4. Browser ONNX export
+
+```bash
+npm run export:onnx -- \
+  --checkpoint engine/python/checkpoints/reinforcement.pt \
+  --output engine/models/othello_dqn.onnx
+```
+
+The exporter also writes `engine/models/othello_dqn.json` with the model contract, byte size, SHA-256 hash, and PyTorch/ONNX Runtime parity result. Until both inference files are deployed, the DQN button automatically uses the Hard CPU instead.
 
 ## Run Locally
 
-Serve the directory over HTTP:
+Install the browser runtime and prepare its static WASM files:
 
 ```bash
+npm install
+npm run prepare:web
 python -m http.server 8000
 ```
 
@@ -83,39 +98,29 @@ Then open:
 http://localhost:8000
 ```
 
-## Tests
+PyTorch and ONNX tooling can be installed separately:
 
-Node.js and Python 3.10 or later are required for the lightweight engine suite:
+```bash
+python -m pip install -e "engine/python[all]"
+```
+
+## Tests
 
 ```bash
 npm test
+npm run test:dqn
+npm run test:teacher
+npm run test:imitation
+npm run test:reinforcement
+npm run test:onnx
 npm run check
 ```
 
-Install the optional PyTorch package and run the DQN tests:
-
-```bash
-python -m pip install -e "engine/python[dqn]"
-npm run test:dqn
-```
-
-`npm test` runs the browser-engine tests, CodinGame source checks, Python rule tests, and JavaScript/Python transition parity checks. `npm run test:dqn` validates the compact network, legal masking, signed Double-DQN targets, replay buffer, and optimizer update.
+CI additionally creates an ONNX fixture and executes it through the JavaScript `onnxruntime-web` WASM backend.
 
 ## GitHub Pages Deployment
 
-The repository includes `.github/workflows/pages.yml`.
-
-After pushing to `main`, open:
-
-```text
-Settings → Pages → Build and deployment → Source → GitHub Actions
-```
-
-The published URL will be:
-
-```text
-https://fdtdengineer.github.io/pocket_othello/
-```
+`.github/workflows/pages.yml` installs `onnxruntime-web`, copies only the WASM execution assets into the static artifact, and deploys `_site/`. The public application and inference runtime are served from the same GitHub Pages origin.
 
 ## Project Structure
 
@@ -123,44 +128,33 @@ https://fdtdengineer.github.io/pocket_othello/
 .
 ├── index.html
 ├── style.css
+├── dqn.css
 ├── app.js
-├── engine.js                     # Compatibility re-export
-├── ai.js                         # Compatibility re-export
+├── engine.js
+├── ai.js
 ├── engine/
-│   ├── README.md
 │   ├── javascript/
 │   │   ├── rules.js
 │   │   ├── evaluation.js
 │   │   ├── search.js
-│   │   └── index.js
+│   │   ├── dqn-core.js
+│   │   ├── dqn-client.js
+│   │   └── dqn-worker.js
 │   ├── codingame/
 │   │   └── othello.js
+│   ├── models/
+│   │   └── README.md
 │   └── python/
-│       ├── pyproject.toml
 │       ├── othello/
-│       │   ├── __init__.py
-│       │   └── rules.py
 │       ├── dqn/
-│       │   ├── __init__.py
-│       │   ├── encoding.py
-│       │   ├── model.py
-│       │   ├── replay_buffer.py
-│       │   └── agent.py
 │       ├── tests/
-│       │   ├── test_rules.py
-│       │   └── test_dqn.py
 │       └── README.md
-├── online.js
-├── manifest.webmanifest
-├── service-worker.js
-├── icon.svg
+├── scripts/
+│   └── prepare-web.mjs
 ├── tests/
-│   ├── engine.test.mjs
-│   ├── codingame.test.mjs
-│   └── export_js_rule_cases.mjs
+├── online.js
+├── service-worker.js
 └── .github/workflows/
-    ├── ci.yml
-    └── pages.yml
 ```
 
 ## License
