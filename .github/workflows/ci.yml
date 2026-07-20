@@ -41,5 +41,8 @@ jobs:
       - name: Generate and validate teacher data
         run: npm run test:teacher
 
+      - name: Run imitation pretraining smoke test
+        run: npm run test:imitation
+
       - name: Check JavaScript syntax
         run: npm run check
