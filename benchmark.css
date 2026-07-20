@@ -1,0 +1,147 @@
+.benchmark-shell {
+  width: min(920px, calc(100% - 28px));
+  margin: 0 auto;
+  padding: max(24px, env(safe-area-inset-top)) 0 max(40px, env(safe-area-inset-bottom));
+}
+
+.benchmark-header,
+.result-heading,
+.benchmark-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.benchmark-header {
+  margin-bottom: 20px;
+}
+
+.benchmark-header h1 {
+  margin: 2px 0 0;
+}
+
+.benchmark-back {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.benchmark-card {
+  margin-bottom: 16px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.benchmark-card h2 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+
+.benchmark-card p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.metric-grid div {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .025);
+}
+
+.metric-grid dt {
+  color: var(--muted);
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.metric-grid dd {
+  margin: 5px 0 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.benchmark-controls {
+  align-items: flex-end;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.benchmark-controls label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.benchmark-controls input {
+  width: 110px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-strong);
+  color: var(--text);
+  font: inherit;
+}
+
+.benchmark-status {
+  margin: 14px 0 0;
+}
+
+.benchmark-status.is-error {
+  color: #ff9b9b;
+}
+
+.result-json {
+  max-height: 360px;
+  margin: 16px 0 0;
+  padding: 14px;
+  overflow: auto;
+  border-radius: 12px;
+  background: #03100b;
+  color: #b7f7d2;
+  font-size: .73rem;
+  line-height: 1.55;
+}
+
+.benchmark-note {
+  border-style: dashed;
+}
+
+@media (max-width: 620px) {
+  .benchmark-header,
+  .result-heading {
+    align-items: flex-start;
+  }
+
+  .benchmark-header h1 {
+    font-size: 1.65rem;
+  }
+
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .benchmark-controls > * {
+    flex: 1 1 120px;
+  }
+
+  .benchmark-controls .primary-button {
+    flex-basis: 100%;
+  }
+}
