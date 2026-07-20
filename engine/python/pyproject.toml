@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pocket-othello-engine"
-version = "0.2.0"
-description = "Othello rules and compact PyTorch Dueling Double-DQN components"
+version = "0.4.0"
+description = "Othello rules, compact Dueling Double DQN, and imitation pretraining"
 requires-python = ">=3.10"
 
 [project.optional-dependencies]
