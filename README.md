@@ -17,8 +17,8 @@ https://fdtdengineer.github.io/pocket_othello/
 - Responsive mobile layout with iPhone safe-area and Safari toolbar clearance
 - Installable PWA and offline CPU/local play
 - Standalone CodinGame validation bot
-- Pure-Python rules engine prepared for PyTorch DQN training
-- Automatic JavaScript/Python board-transition parity tests
+- Pure-Python rules engine with JavaScript transition parity tests
+- Compact PyTorch Dueling Double-DQN building blocks
 - No browser build process
 
 ## Engine Architecture
@@ -31,7 +31,7 @@ The reusable game and AI logic lives under `engine/`:
 - `engine/javascript/index.js`: stable JavaScript entry point
 - `engine/codingame/othello.js`: standalone CodinGame JavaScript submission
 - `engine/python/othello/rules.py`: dependency-free Python rules with the same representation and transitions
-- `engine/python/`: package boundary for PyTorch training, evaluation, and model export
+- `engine/python/dqn/`: compact observation, model, replay-buffer, and Double-DQN utilities
 
 The root `engine.js` and `ai.js` files are compatibility entry points for the existing web app. They contain no engine implementation and only re-export modules from `engine/javascript/`.
 
@@ -51,7 +51,7 @@ The file is dependency-free and requires no bundling. CodinGame allows 150 ms pe
 
 ## Python/PyTorch DQN
 
-The Python rules layer is implemented under `engine/python/`. JavaScript, Python, and CodinGame implementations share these conventions:
+The Python rules and initial DQN core are implemented under `engine/python/`. JavaScript, Python, and CodinGame implementations share these conventions:
 
 - flat row-major board with 64 cells
 - `0` for empty, `1` for black, and `-1` for white
@@ -59,7 +59,9 @@ The Python rules layer is implemented under `engine/python/`. JavaScript, Python
 - a fixed 64-action output with illegal-action masking
 - automatic pass handling and the same terminal-state definition
 
-The current parity test generates deterministic JavaScript games and checks every Python legal move, flip list, resulting board, pass, next-player decision, and terminal result. Future DQN code can therefore use the Python rules API without maintaining a separate interpretation of Othello.
+The DQN input is a player-relative `4 × 8 × 8` tensor containing own discs, opponent discs, legal moves, and game progress. The default residual dueling network has 56,978 trainable parameters, approximately 228 KB of FP32 weights. It includes signed zero-sum Double-DQN targets, replay memory, epsilon-greedy legal action selection, target-network updates, and a tested optimizer step.
+
+Training loops, teacher-data generation, self-play, evaluation, ONNX export, and browser integration are subsequent stages.
 
 ## Online Matches
 
@@ -83,14 +85,21 @@ http://localhost:8000
 
 ## Tests
 
-Node.js and Python 3.10 or later are required for the complete engine test suite.
+Node.js and Python 3.10 or later are required for the lightweight engine suite:
 
 ```bash
 npm test
 npm run check
 ```
 
-`npm test` runs the browser-engine tests, CodinGame source checks, Python rule tests, and JavaScript/Python transition parity checks.
+Install the optional PyTorch package and run the DQN tests:
+
+```bash
+python -m pip install -e "engine/python[dqn]"
+npm run test:dqn
+```
+
+`npm test` runs the browser-engine tests, CodinGame source checks, Python rule tests, and JavaScript/Python transition parity checks. `npm run test:dqn` validates the compact network, legal masking, signed Double-DQN targets, replay buffer, and optimizer update.
 
 ## GitHub Pages Deployment
 
@@ -131,8 +140,15 @@ https://fdtdengineer.github.io/pocket_othello/
 │       ├── othello/
 │       │   ├── __init__.py
 │       │   └── rules.py
+│       ├── dqn/
+│       │   ├── __init__.py
+│       │   ├── encoding.py
+│       │   ├── model.py
+│       │   ├── replay_buffer.py
+│       │   └── agent.py
 │       ├── tests/
-│       │   └── test_rules.py
+│       │   ├── test_rules.py
+│       │   └── test_dqn.py
 │       └── README.md
 ├── online.js
 ├── manifest.webmanifest

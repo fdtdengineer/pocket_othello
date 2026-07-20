@@ -4,10 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pocket-othello-engine"
-version = "0.1.0"
-description = "Pure-Python Othello rules and future PyTorch DQN components"
+version = "0.2.0"
+description = "Othello rules and compact PyTorch Dueling Double-DQN components"
 requires-python = ">=3.10"
+
+[project.optional-dependencies]
+dqn = ["torch>=2.0,<3"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["othello*"]
+include = ["othello*", "dqn*"]
