@@ -38,5 +38,8 @@ jobs:
       - name: Run Dueling Double-DQN tests
         run: npm run test:dqn
 
+      - name: Generate and validate teacher data
+        run: npm run test:teacher
+
       - name: Check JavaScript syntax
         run: npm run check

@@ -1,14 +1,16 @@
 {
   "name": "pocket-othello",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "scripts": {
     "test:javascript": "node tests/engine.test.mjs && node tests/codingame.test.mjs",
     "test:python-rules": "python -m unittest discover -s engine/python/tests -p \"test_rules.py\"",
     "test:dqn": "python -m unittest discover -s engine/python/tests -p \"test_dqn.py\"",
+    "test:teacher": "python -m unittest discover -s engine/python/tests -p \"test_teacher_data.py\"",
     "test": "npm run test:javascript && npm run test:python-rules",
-    "test:all": "npm test && npm run test:dqn",
-    "check": "node --check app.js && node --check engine.js && node --check ai.js && node --check online.js && node --check engine/javascript/rules.js && node --check engine/javascript/evaluation.js && node --check engine/javascript/search.js && node --check engine/javascript/index.js && node --check engine/codingame/othello.js && node --check tests/export_js_rule_cases.mjs"
+    "test:all": "npm test && npm run test:dqn && npm run test:teacher",
+    "generate:teacher": "node engine/javascript/generate_teacher_data.mjs",
+    "check": "node --check app.js && node --check engine.js && node --check ai.js && node --check online.js && node --check engine/javascript/rules.js && node --check engine/javascript/evaluation.js && node --check engine/javascript/search.js && node --check engine/javascript/index.js && node --check engine/javascript/generate_teacher_data.mjs && node --check engine/codingame/othello.js && node --check tests/export_js_rule_cases.mjs"
   }
 }
