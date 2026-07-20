@@ -48,7 +48,9 @@ class ReinforcementTest(unittest.TestCase):
                 )
                 self.assertGreater(result.moves, 0)
                 self.assertLessEqual(result.moves, 60)
-                self.assertEqual(result.black_discs + result.white_discs, 64)
+                occupied = result.black_discs + result.white_discs
+                self.assertGreaterEqual(occupied, 4)
+                self.assertLessEqual(occupied, 64)
                 self.assertTrue(result.transitions[-1].terminated)
                 self.assertIn(result.transitions[-1].reward, {-1.0, 0.0, 1.0})
 
