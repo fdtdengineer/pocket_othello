@@ -1,0 +1,19 @@
+.segmented {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.segmented button[data-difficulty="dqn"] {
+  color: var(--green-bright);
+}
+
+.segmented button[data-difficulty="dqn"].is-selected {
+  background: linear-gradient(135deg, rgba(96, 240, 162, .24), rgba(34, 200, 120, .12));
+  color: var(--text);
+}
+
+@media (max-width: 430px) {
+  .segmented button {
+    padding-inline: 2px;
+    font-size: .68rem;
+  }
+}
